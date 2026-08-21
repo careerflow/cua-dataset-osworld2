@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "name": "cua-dataset-osworld2",
+  "description": "Careerflow OSWorld-V2 installer and compatibility layer. Ships no tasks; extract the Careerflow task zip into tasks/ before running install.py.",
+  "osworld": {
+    "repository": "https://github.com/xlang-ai/OSWorld-V2",
+    "commit": "8b6b59660b59832a42a345db8f86fa9f98c37573",
+    "verified_on": "2026-08-14"
+  },
+  "installer": "install.py",
+  "task_ids": "auto-detected from tasks/task_<id>/task_<id>.py at install time",
+  "asset_destination": "cache/osworld_v2_assets/task_<id>/"
+}

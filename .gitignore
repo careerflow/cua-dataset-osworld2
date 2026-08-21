@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# This repository is a task package, not an OSWorld runtime checkout.
+.venv/
+cache/
+results/
+logs/
+.env
+
+# Task zips are distributed out-of-band and extracted here at install time.
+tasks/

@@ -1,0 +1,81 @@
+diff --git a/desktop_env/controllers/website.py b/desktop_env/controllers/website.py
+index b721e8f..18190a1 100644
+--- a/desktop_env/controllers/website.py
++++ b/desktop_env/controllers/website.py
+@@ -27,14 +27,29 @@ logger = logging.getLogger("desktopenv.website")
+ @lru_cache(maxsize=None)
+ def _select_website_scheme(host: str) -> str:
+     https_url = f"https://{host}"
+-    try:
+-        response = requests.get(https_url, timeout=3, allow_redirects=False, stream=True)
+-        response.close()
+-        logger.info("Using HTTPS for %s", host)
+-        return "https://"
+-    except requests.RequestException as exc:
+-        logger.info("HTTPS probe failed for %s, falling back to HTTP: %s", host, exc)
+-        return "http://"
++    # Hosted benchmark apps use self-signed certificates.  A normal
++    # certificate-verifying probe incorrectly treats a healthy HTTPS app as
++    # unavailable, falls back to HTTP, and can turn a state PUT into a redirect
++    # where the payload is not preserved.  The stateful setup calls already use
++    # ``verify=False``; the scheme probe must match.
++    #
++    # The probe is also retried with a generous timeout: this result is cached
++    # for the whole process, so one slow first response would otherwise send an
++    # entire run to HTTP and fail every stateful setup in it.
++    last_error: Optional[Exception] = None
++    for timeout in (10, 20):
++        try:
++            response = requests.get(
++                https_url, timeout=timeout, allow_redirects=False, stream=True, verify=False,
++            )
++            response.close()
++            logger.info("Using HTTPS for %s", host)
++            return "https://"
++        except requests.RequestException as exc:
++            last_error = exc
++            logger.info("HTTPS probe for %s failed at timeout=%ss: %s", host, timeout, exc)
++    logger.warning("HTTPS unavailable for %s, falling back to HTTP: %s", host, last_error)
++    return "http://"
+ 
+ 
+ def build_website_url(path: str) -> str:
+@@ -167,8 +182,15 @@ def prepare_stateful_website_urls(
+         state_endpoint = urljoin(f"{parsed_target.scheme}://{parsed_target.netloc}", "/api/state")
+ 
+         try:
+-            initial_resp = requests.get(state_endpoint, timeout=30, verify=False)
++            initial_resp = requests.get(
++                state_endpoint, timeout=30, verify=False, allow_redirects=False,
++            )
+             initial_resp.raise_for_status()
++            if 300 <= initial_resp.status_code < 400:
++                raise requests.RequestException(
++                    f"State endpoint redirected from {state_endpoint} to "
++                    f"{initial_resp.headers.get('location', '<unknown>')}"
++                )
+         except requests.RequestException as e:
+             logger.error("Failed to fetch initial cookie from %s: %s", state_endpoint, e)
+             raise
+@@ -182,8 +204,20 @@ def prepare_stateful_website_urls(
+         }
+ 
+         try:
+-            put_resp = requests.put(state_endpoint, json=state_payload, headers=headers, timeout=30, verify=False)
++            put_resp = requests.put(
++                state_endpoint,
++                json=state_payload,
++                headers=headers,
++                timeout=30,
++                verify=False,
++                allow_redirects=False,
++            )
+             put_resp.raise_for_status()
++            if 300 <= put_resp.status_code < 400:
++                raise requests.RequestException(
++                    f"State update redirected from {state_endpoint} to "
++                    f"{put_resp.headers.get('location', '<unknown>')}"
++                )
+         except requests.RequestException as e:
+             logger.error("Failed to update state at %s: %s", state_endpoint, e)
+             raise
